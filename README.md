@@ -53,4 +53,4 @@ python Minesweeper.py
 
 The following should now appear on the screen:
 
-![Starting Screen](screenshots/starting_screen.jpg?raw=true)
+![Starting Screen](screenshots/starting_screen.PNG?raw=true)
