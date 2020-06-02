@@ -21,8 +21,8 @@ pygame.font.init()
 clock = pygame.time.Clock()
 
 # Load images
-flag_image = pygame.image.load('images/flag.png')
-mine_image = pygame.image.load('images/mine.jpg')
+flag_image = pygame.image.load('game_images/flag.png')
+mine_image = pygame.image.load('game_images/mine.jpg')
 
 # Color Constants
 BLACK = pygame.Color('#000000')
@@ -32,7 +32,7 @@ WHITE = pygame.Color('#FFFFFF')
 
 # Grid States
 CLEAR = 0
-UNTOUCHED = 9
+COVERED = 9
 FLAG = 10
 MINE = -1
 
@@ -54,13 +54,16 @@ class Minesweeper:
 
         if self.difficulty == EASY:
             self.scale = 1
-            self.my_font = pygame.font.SysFont('Arial', FONT_LARGE)
+            self.grid_font = pygame.font.SysFont('Arial', FONT_LARGE)
         elif self.difficulty == MEDIUM:
             self.scale = 2 / 3
-            self.my_font = pygame.font.SysFont('Arial', FONT_MEDIUM)
+            self.grid_font = pygame.font.SysFont('Arial', FONT_MEDIUM)
         else:
             self.scale = 0.5
-            self.my_font = pygame.font.SysFont('Arial', FONT_SMALL)
+            self.grid_font = pygame.font.SysFont('Arial', FONT_SMALL)
+
+        # Font for displaying flag counter, victory message, and defeat message
+        self.messages_font = pygame.font.SysFont('Arial', FONT_LARGE)
 
         # Sets width, height, margins, grids, number of mines and flags based on difficulty level
         self.width = int(60 * self.scale)
@@ -68,7 +71,7 @@ class Minesweeper:
         self.margins = 3
         self.user_grid = np.full((int((DIMENSIONS[1] - BOTTOM_TEXT_SPACING) / self.height),
                                   int(DIMENSIONS[0] / self.width)),
-                                 UNTOUCHED)
+                                 COVERED)
         self.hidden_grid = np.array(self.user_grid)
         self.cleared_grid = np.array(self.user_grid)
         self.num_mines = len(self.user_grid) * len(self.user_grid[0]) * 1 / 6
@@ -82,7 +85,7 @@ class Minesweeper:
 
         self.draw()
 
-    # Start screen
+    # Displays start screen
     def __start_screen(self):
         text_surface_easy = pygame.font.SysFont('Arial', FONT_LARGE).render(EASY, False, BLACK)
         start_coords_easy = self.find_start_coords(text_surface_easy, 1 / 4)
@@ -128,18 +131,14 @@ class Minesweeper:
     def draw(self):
         # Victory / Loss condition
         mine_triggered = False
-        matching_boards = False
+        matching_grids = False
 
-        # Initialization of hidden board condition
+        # Initialization of hidden grid condition
         first_click = True
 
-        # Bottom Text Font
-        bottom_text_font = pygame.font.SysFont('Arial', FONT_LARGE)
-
-        while not mine_triggered and not matching_boards:
+        while not mine_triggered and not matching_grids:
             screen.fill(BLACK)
 
-            # Event loop
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -150,12 +149,12 @@ class Minesweeper:
                     column = int(pos[0] / self.width)
                     row = int(pos[1] / self.height)
 
-                    if 0 <= row < len(self.user_grid) and 0 <= column < (len(self.user_grid[0])):
-                        # User left clicks UNTOUCHED position
-                        if event.button == 1 and self.user_grid[row][column] == UNTOUCHED:
-                            # Creates a hidden board, which the user board is compared to
+                    if 0 <= row < len(self.user_grid) and 0 <= column < len(self.user_grid[0]):
+                        # User left clicks COVERED position
+                        if event.button == 1 and self.user_grid[row][column] == COVERED:
+                            # Creates a hidden grid, to which the user grid is compared
                             if first_click:
-                                self.__create_hidden_board(row, column)
+                                self.__create_hidden_grid(row, column)
                                 self.user_grid[row][column] = self.hidden_grid[row][column]
                                 first_click = False
                             else:
@@ -164,20 +163,21 @@ class Minesweeper:
                                     mine_triggered = True
                                     break
                                 if self.hidden_grid[row][column] == CLEAR:
-                                    self.__clear_surrounding_squares(row, column)
+                                    self.__clear_surrounding_cells(row, column)
                         # User right clicks
                         # Plants a flag if there is not one present, or removes if there is one
                         elif event.button == 3:
-                            if self.user_grid[row][column] == UNTOUCHED and self.flag_count > 0:
+                            if self.user_grid[row][column] == COVERED and self.flag_count > 0:
                                 self.user_grid[row][column] = FLAG
                                 self.flag_count -= 1
                             elif self.user_grid[row][column] == FLAG:
-                                self.user_grid[row][column] = UNTOUCHED
+                                self.user_grid[row][column] = COVERED
                                 self.flag_count += 1
 
+            # Iterates through each element of user grid and draws the cell/adds the flag
             for r, c in np.ndindex(self.user_grid.shape):
                 if self.user_grid[r][c] != MINE:
-                    if self.user_grid[r][c] == UNTOUCHED:
+                    if self.user_grid[r][c] == COVERED:
                         color = GREEN
                     else:
                         color = BLUE
@@ -193,9 +193,9 @@ class Minesweeper:
                         screen.blit(self.flag_image, (self.width * c + self.margins,
                                                       self.height * r + self.margins))
 
-                    if self.user_grid[r][c] != CLEAR and self.user_grid[r][c] != UNTOUCHED and \
+                    if CLEAR < self.user_grid[r][c] != CLEAR and self.user_grid[r][c] != COVERED and \
                             self.user_grid[r][c] != FLAG:
-                        text_surface_num = self.my_font.render(str(self.user_grid[r][c]), False, WHITE)
+                        text_surface_num = self.grid_font.render(str(self.user_grid[r][c]), False, WHITE)
                         screen.blit(text_surface_num,
                                     (int(
                                         self.width * c + self.width / 2 - text_surface_num.get_width() / 2
@@ -204,7 +204,7 @@ class Minesweeper:
                                          self.height * r + self.height / 2 - text_surface_num.get_height() / 2
                                          + self.margins)))
 
-            text_surface_flags = bottom_text_font.render("Flags: {0}".format(int(self.flag_count)), False, GREEN)
+            text_surface_flags = self.messages_font.render("Flags: {0}".format(int(self.flag_count)), False, GREEN)
             pygame.draw.rect(screen,
                              BLACK,
                              [int(DIMENSIONS[0] / 2 - text_surface_flags.get_width() / 2),
@@ -217,17 +217,18 @@ class Minesweeper:
                          int((DIMENSIONS[1] + (
                                  DIMENSIONS[1] - BOTTOM_TEXT_SPACING)) / 2 - text_surface_flags.get_height() / 2)))
 
+            # Determines if user grid is equal to computer grid
             if not first_click:
-                temp = True
+                matching = True
 
                 for r, c in np.ndindex(self.user_grid.shape):
                     if self.hidden_grid[r][c] != MINE:
-                        temp = (self.user_grid[r][c] == self.hidden_grid[r][c])
-                        if not temp:
+                        matching = (self.user_grid[r][c] == self.hidden_grid[r][c])
+                        if not matching:
                             break
 
-                if temp:
-                    matching_boards = True
+                if matching:
+                    matching_grids = True
 
             # Displays 60 frames a second
             clock.tick(60)
@@ -238,14 +239,14 @@ class Minesweeper:
         else:
             self.__display_victory()
 
-    # Develops the computer board, which is compared to the user board
-    def __create_hidden_board(self, row_index, column_index):
+    # Creates the computer grid, which is compared to the user grid
+    def __create_hidden_grid(self, row_index, column_index):
         for i in range(int(self.num_mines)):
             mine_created = False
             while not mine_created:
                 x = random.randint(0, len(self.hidden_grid) - 1)
                 y = random.randint(0, len(self.hidden_grid[0]) - 1)
-                if self.hidden_grid[x][y] == UNTOUCHED:
+                if self.hidden_grid[x][y] == COVERED:
                     self.hidden_grid[x][y] = MINE
                     mine_created = True
                 if row_index - 1 <= x <= row_index + 1 and column_index - 1 <= y <= column_index + 1:
@@ -254,9 +255,9 @@ class Minesweeper:
         for ix, iy in np.ndindex(self.hidden_grid.shape):
             if self.hidden_grid[ix][iy] != MINE:
                 self.hidden_grid[ix][iy] = self.__count_adjacent_mines(ix, iy)
-        self.__clear_surrounding_squares(row_index, column_index)
+        self.__clear_surrounding_cells(row_index, column_index)
 
-    # Counts the number of adjacent mines
+    # Counts the number of adjacent mines given a row and column
     def __count_adjacent_mines(self, given_row, given_column):
         adjacent_mines = 0
         for ii in range(given_row - 1, given_row + 2):
@@ -269,8 +270,8 @@ class Minesweeper:
                             adjacent_mines += 1
         return adjacent_mines
 
-    # Recursively clears the surrounding squares that have no mines
-    def __clear_surrounding_squares(self, r_index, c_index):
+    # Recursively clears the surrounding cells that have no mines
+    def __clear_surrounding_cells(self, r_index, c_index):
         if self.user_grid[r_index][c_index] == FLAG:
             self.flag_count += 1
         self.user_grid[r_index][c_index] = self.hidden_grid[r_index][c_index]
@@ -278,11 +279,11 @@ class Minesweeper:
             for i in range(r_index - 1, r_index + 2):
                 for j in range(c_index - 1, c_index + 2):
                     if 0 <= i < len(self.hidden_grid) and 0 <= j < len(self.hidden_grid[0]) and \
-                            self.cleared_grid[i][j] == UNTOUCHED:
+                            self.cleared_grid[i][j] == COVERED:
                         self.cleared_grid[i][j] = CLEAR
-                        self.__clear_surrounding_squares(i, j)
+                        self.__clear_surrounding_cells(i, j)
 
-    # Victory Screen
+    # Displays the victory screen
     def __display_victory(self):
         while True:
             for event in pygame.event.get():
@@ -294,7 +295,7 @@ class Minesweeper:
                     screen.blit(self.mine_image, (self.width * c + self.margins,
                                                   self.height * r + self.margins))
 
-            text_surface_victory = self.my_font.render("CONGRATULATIONS!", False, WHITE)
+            text_surface_victory = self.messages_font.render("CONGRATULATIONS!", False, WHITE)
             pygame.draw.rect(screen,
                              BLACK,
                              [int(DIMENSIONS[0] / 2 - text_surface_victory.get_width() / 2),
@@ -307,9 +308,8 @@ class Minesweeper:
             clock.tick(60)
             pygame.display.flip()
 
-    # Defeat Screen
+    # Displays the defeat screen
     def __display_defeat(self):
-        # Defeat Screen
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -320,16 +320,16 @@ class Minesweeper:
                     screen.blit(self.mine_image, (self.width * c + self.margins,
                                                   self.height * r + self.margins))
                 else:
-                    if self.hidden_grid[r][c] != CLEAR and self.hidden_grid[r][c] != UNTOUCHED and \
+                    if self.hidden_grid[r][c] != CLEAR and self.hidden_grid[r][c] != COVERED and \
                             self.hidden_grid[r][c] != FLAG:
-                        text_surface_num = self.my_font.render(str(self.hidden_grid[r][c]), False, WHITE)
+                        text_surface_num = self.grid_font.render(str(self.hidden_grid[r][c]), False, WHITE)
                         screen.blit(text_surface_num,
                                     (int(self.width * c + self.width / 2 - text_surface_num.get_width() / 2
                                          + self.margins),
                                      int(self.height * r + self.height / 2 - text_surface_num.get_height() / 2
                                          + self.margins)))
 
-            text_surface_defeat = self.my_font.render("GAME OVER", False, WHITE)
+            text_surface_defeat = self.messages_font.render("GAME OVER", False, WHITE)
             pygame.draw.rect(screen,
                              BLACK,
                              [int(DIMENSIONS[0] / 2 - text_surface_defeat.get_width() / 2),
